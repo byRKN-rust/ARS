@@ -16,14 +16,14 @@ def debug_config():
     print("📋 Переменные окружения:")
     print(f"TELEGRAM_TOKEN (env): {os.getenv('TELEGRAM_TOKEN', 'НЕ НАЙДЕН')}")
     print(f"TELEGRAM_ADMIN_ID (env): {os.getenv('TELEGRAM_ADMIN_ID', 'НЕ НАЙДЕН')}")
-    print(f"FUNPAY_LOGIN (env): {os.getenv('FUNPAY_LOGIN', 'НЕ НАЙДЕН')}")
-    print(f"FUNPAY_PASSWORD (env): {os.getenv('FUNPAY_PASSWORD', 'НЕ НАЙДЕН')}")
+    print(f"FUNPAY_TOKEN (env): {os.getenv('FUNPAY_TOKEN', 'НЕ НАЙДЕН')}")
+    print(f"STEAM_API_KEY (env): {os.getenv('STEAM_API_KEY', 'НЕ НАЙДЕН')}")
     
     print("\n📋 Значения из Config:")
     print(f"TELEGRAM_TOKEN (config): {Config.TELEGRAM_TOKEN}")
     print(f"TELEGRAM_ADMIN_ID (config): {Config.TELEGRAM_ADMIN_ID}")
-    print(f"FUNPAY_LOGIN (config): {Config.FUNPAY_LOGIN}")
-    print(f"FUNPAY_PASSWORD (config): {Config.FUNPAY_PASSWORD}")
+    print(f"FUNPAY_TOKEN (config): {Config.FUNPAY_TOKEN}")
+    print(f"STEAM_API_KEY (config): {Config.STEAM_API_KEY}")
     
     print("\n🔧 Проверка работоспособности:")
     
@@ -42,15 +42,18 @@ def debug_config():
         print("❌ TELEGRAM_ADMIN_ID не настроен")
     
     # Проверяем FunPay
-    if Config.FUNPAY_LOGIN and Config.FUNPAY_LOGIN != '':
-        print("✅ FUNPAY_LOGIN настроен")
+    if Config.FUNPAY_TOKEN and Config.FUNPAY_TOKEN != '' and Config.FUNPAY_TOKEN != 'your_funpay_token_here':
+        print("✅ FUNPAY_TOKEN настроен")
+        print(f"   Токен: {Config.FUNPAY_TOKEN[:20]}...")
     else:
-        print("❌ FUNPAY_LOGIN не настроен")
+        print("❌ FUNPAY_TOKEN не настроен")
     
-    if Config.FUNPAY_PASSWORD and Config.FUNPAY_PASSWORD != '':
-        print("✅ FUNPAY_PASSWORD настроен")
+    # Проверяем Steam
+    if Config.STEAM_API_KEY and Config.STEAM_API_KEY != '' and Config.STEAM_API_KEY != 'your_steam_api_key_here':
+        print("✅ STEAM_API_KEY настроен")
+        print(f"   Ключ: {Config.STEAM_API_KEY[:20]}...")
     else:
-        print("❌ FUNPAY_PASSWORD не настроен")
+        print("❌ STEAM_API_KEY не настроен")
     
     print("\n📊 Рекомендации:")
     

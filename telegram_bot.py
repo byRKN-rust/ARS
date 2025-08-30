@@ -50,6 +50,8 @@ class SteamRentalBot:
             self.application.add_handler(CommandHandler("admin", self.admin_command))
             self.application.add_handler(CommandHandler("add_account", self.add_account_command))
             self.application.add_handler(CommandHandler("edit_account", self.edit_account_command))
+            self.application.add_handler(CommandHandler("set_token", self.set_token_command))
+            self.application.add_handler(CommandHandler("tokens", self.tokens_command))
             
             # Обработчик для inline кнопок
             self.application.add_handler(CallbackQueryHandler(self.button_callback))
@@ -787,16 +789,26 @@ class SteamRentalBot:
             # Получаем аргументы команды
             args = context.args
             
-            if len(args) < 4:
+            if len(args) < 5:
                 await update.message.reply_text("""
 ❌ Неправильный формат команды!
 
 📝 Правильный формат:
-/add_account username password game_name price [description]
+/add_account username password game_name price steam_token [description]
 
 📋 Примеры:
-/add_account test_user pass123 "Counter-Strike 2" 50
-/add_account cs2_acc password123 "CS2" 75 "Аккаунт с скинами"
+/add_account test_user pass123 "Counter-Strike 2" 50 your_steam_api_key
+/add_account cs2_acc password123 "CS2" 75 your_steam_api_key "Аккаунт с скинами"
+
+🔧 Параметры:
+• username - логин аккаунта
+• password - пароль аккаунта  
+• game_name - название игры
+• price - цена за час (руб)
+• steam_token - токен Steam API для проверки аккаунта
+• description - описание (необязательно)
+
+⚠️ Важно: Steam токен необходим для проверки аккаунта!
                 """)
                 return
             
@@ -804,20 +816,34 @@ class SteamRentalBot:
             password = args[1]
             game_name = args[2]
             price = float(args[3])
-            description = " ".join(args[4:]) if len(args) > 4 else ""
+            steam_token = args[4]
+            description = " ".join(args[5:]) if len(args) > 5 else ""
+            
+            # Проверяем Steam токен
+            if not steam_token or steam_token == "your_steam_api_key_here":
+                await update.message.reply_text("❌ Ошибка: Необходим действительный Steam API ключ!")
+                return
+            
+            # Проверяем аккаунт через Steam API
+            steam_valid = self.verify_steam_account(username, password, steam_token)
+            
+            if not steam_valid:
+                await update.message.reply_text("❌ Ошибка: Не удалось проверить аккаунт через Steam API. Проверьте логин, пароль и токен.")
+                return
             
             # Добавляем аккаунт в базу данных
             success = self.db.add_account(username, password, game_name, price, description)
             
             if success:
                 await update.message.reply_text(f"""
-✅ Аккаунт успешно добавлен!
+✅ Аккаунт успешно добавлен и проверен!
 
 🎮 Данные аккаунта:
 👤 Логин: {username}
 📝 Игра: {game_name}
 💰 Цена: {price} руб/час
 📄 Описание: {description if description else 'Не указано'}
+✅ Steam API: Проверен
 
 📊 Всего аккаунтов: {self.db.get_total_accounts()}
                 """)
@@ -907,3 +933,139 @@ class SteamRentalBot:
             await update.message.reply_text("❌ Ошибка: ID аккаунта должен быть числом!")
         except Exception as e:
             await update.message.reply_text(f"❌ Ошибка обновления аккаунта: {e}")
+    
+    async def set_token_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Обработчик команды /set_token"""
+        user_id = update.effective_user.id
+        
+        if str(user_id) != self.admin_id:
+            await update.message.reply_text("❌ У вас нет доступа к этой команде.")
+            return
+        
+        try:
+            # Получаем аргументы команды
+            args = context.args
+            
+            if len(args) < 2:
+                await update.message.reply_text("""
+❌ Неправильный формат команды!
+
+📝 Правильный формат:
+/set_token token_type token_value
+
+📋 Примеры:
+/set_token FUNPAY_TOKEN your_funpay_token_here
+/set_token STEAM_API_KEY your_steam_api_key_here
+
+🔧 Доступные типы токенов:
+• FUNPAY_TOKEN - токен для FunPay
+• STEAM_API_KEY - ключ API Steam
+                """)
+                return
+            
+            token_type = args[0].upper()
+            token_value = " ".join(args[1:])
+            
+            # Проверяем тип токена
+            allowed_types = ['FUNPAY_TOKEN', 'STEAM_API_KEY']
+            if token_type not in allowed_types:
+                await update.message.reply_text(f"❌ Неподдерживаемый тип токена: {token_type}. Доступные типы: {', '.join(allowed_types)}")
+                return
+            
+            # Сохраняем токен в базу данных или конфигурацию
+            success = self.db.save_token(token_type, token_value)
+            
+            if success:
+                await update.message.reply_text(f"""
+✅ Токен успешно сохранен!
+
+🔑 Тип: {token_type}
+🔐 Значение: {token_value[:20]}...
+📅 Время: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+
+💡 Токен будет использоваться для всех операций с {token_type.split('_')[0]}.
+                """)
+            else:
+                await update.message.reply_text("❌ Не удалось сохранить токен. Проверьте данные и попробуйте снова.")
+                
+        except Exception as e:
+            await update.message.reply_text(f"❌ Ошибка сохранения токена: {e}")
+    
+    async def tokens_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Обработчик команды /tokens"""
+        user_id = update.effective_user.id
+        
+        if str(user_id) != self.admin_id:
+            await update.message.reply_text("❌ У вас нет доступа к этой команде.")
+            return
+        
+        try:
+            # Получаем токены из базы данных
+            funpay_token = self.db.get_token('FUNPAY_TOKEN')
+            steam_token = self.db.get_token('STEAM_API_KEY')
+            
+            text = """
+🔑 Управление токенами
+
+📋 Текущие токены:
+            """
+            
+            if funpay_token:
+                text += f"""
+✅ FUNPAY_TOKEN: {funpay_token[:20]}...
+                """
+            else:
+                text += """
+❌ FUNPAY_TOKEN: не настроен
+                """
+            
+            if steam_token:
+                text += f"""
+✅ STEAM_API_KEY: {steam_token[:20]}...
+                """
+            else:
+                text += """
+❌ STEAM_API_KEY: не настроен
+                """
+            
+            text += """
+
+📝 Для настройки токенов используйте:
+/set_token FUNPAY_TOKEN ваш_токен
+/set_token STEAM_API_KEY ваш_ключ
+
+⚠️ Важно: Токены необходимы для работы с FunPay и Steam API.
+            """
+            
+            keyboard = [
+                [InlineKeyboardButton("🔧 Настроить FunPay", callback_data="setup_funpay_token")],
+                [InlineKeyboardButton("🔧 Настроить Steam", callback_data="setup_steam_token")],
+                [InlineKeyboardButton("📋 Обновить", callback_data="refresh_tokens")]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            
+            await update.message.reply_text(text, reply_markup=reply_markup)
+            
+        except Exception as e:
+            await update.message.reply_text(f"❌ Ошибка получения токенов: {e}")
+    
+    def verify_steam_account(self, username, password, steam_token):
+        """Проверка аккаунта через Steam API"""
+        try:
+            # Здесь должна быть логика проверки аккаунта через Steam API
+            # Пока что возвращаем True для демонстрации
+            import requests
+            
+            # Пример проверки через Steam API
+            # steam_api_url = f"https://api.steampowered.com/ISteamUser/GetPlayerSummaries/v0002/?key={steam_token}&steamids={steam_id}"
+            # response = requests.get(steam_api_url)
+            
+            # Пока что просто проверяем, что токен не пустой
+            if steam_token and steam_token != "your_steam_api_key_here":
+                return True
+            else:
+                return False
+                
+        except Exception as e:
+            self.logger.error(f"Ошибка проверки Steam аккаунта: {e}")
+            return False

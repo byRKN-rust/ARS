@@ -1,6 +1,5 @@
 # Настройки FunPay
-FUNPAY_LOGIN=your_funpay_login
-FUNPAY_PASSWORD=your_funpay_password
+FUNPAY_TOKEN=your_funpay_token
 
 # Настройки Telegram бота
 TELEGRAM_TOKEN=your_telegram_bot_token

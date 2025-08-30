@@ -99,17 +99,17 @@ class FunPayManager:
             soup = BeautifulSoup(response.content, 'html.parser')
             orders = []
             
-            # Ищем заказы на странице (адаптируйте селекторы под реальную структуру)
+            # Парсим заказы
             order_elements = soup.find_all('div', {'class': 'order-item'})
             
             for order_elem in order_elements:
                 try:
                     order = {
                         'id': order_elem.get('data-order-id', ''),
-                        'title': order_elem.find('h3').text.strip() if order_elem.find('h3') else '',
-                        'status': order_elem.find('span', {'class': 'status'}).text.strip() if order_elem.find('span', {'class': 'status'}) else '',
-                        'price': order_elem.find('span', {'class': 'price'}).text.strip() if order_elem.find('span', {'class': 'price'}) else '',
-                        'created_at': order_elem.find('span', {'class': 'date'}).text.strip() if order_elem.find('span', {'class': 'date'}) else ''
+                        'title': order_elem.find('div', {'class': 'order-title'}).text.strip(),
+                        'status': order_elem.find('div', {'class': 'order-status'}).text.strip(),
+                        'price': order_elem.find('div', {'class': 'order-price'}).text.strip(),
+                        'date': order_elem.find('div', {'class': 'order-date'}).text.strip()
                     }
                     orders.append(order)
                 except Exception as e:
@@ -140,17 +140,17 @@ class FunPayManager:
             soup = BeautifulSoup(response.content, 'html.parser')
             reviews = []
             
-            # Ищем отзывы на странице (адаптируйте селекторы под реальную структуру)
+            # Парсим отзывы
             review_elements = soup.find_all('div', {'class': 'review-item'})
             
             for review_elem in review_elements:
                 try:
                     review = {
                         'id': review_elem.get('data-review-id', ''),
-                        'author': review_elem.find('span', {'class': 'author'}).text.strip() if review_elem.find('span', {'class': 'author'}) else '',
-                        'rating': review_elem.find('span', {'class': 'rating'}).text.strip() if review_elem.find('span', {'class': 'rating'}) else '',
-                        'text': review_elem.find('div', {'class': 'text'}).text.strip() if review_elem.find('div', {'class': 'text'}) else '',
-                        'created_at': review_elem.find('span', {'class': 'date'}).text.strip() if review_elem.find('span', {'class': 'date'}) else ''
+                        'order_id': review_elem.get('data-order-id', ''),
+                        'rating': int(review_elem.find('div', {'class': 'rating'}).get('data-rating', 0)),
+                        'comment': review_elem.find('div', {'class': 'comment'}).text.strip(),
+                        'date': review_elem.find('div', {'class': 'review-date'}).text.strip()
                     }
                     reviews.append(review)
                 except Exception as e:
@@ -164,101 +164,105 @@ class FunPayManager:
             self.logger.error(f"❌ Ошибка получения отзывов: {e}")
             return []
     
-    def create_rental_listing(self, game_name: str, price_per_hour: float, account_id: str = None):
-        """
-        Создание объявления на FunPay для аренды аккаунта
-        """
-        try:
-            if not self.is_logged_in:
-                if not self.login_to_funpay():
-                    return None
-            
-            self.logger.info(f"📝 Создание объявления для игры: {game_name}")
-            
-            # Получаем страницу создания объявления
-            response = self.session.get(f"{self.base_url}/account/sells/add")
-            if response.status_code != 200:
-                self.logger.error(f"❌ Ошибка получения страницы создания объявления: {response.status_code}")
-                return None
-            
-            soup = BeautifulSoup(response.content, 'html.parser')
-            
-            # Ищем CSRF токен
-            csrf_token = None
-            csrf_input = soup.find('input', {'name': '_token'})
-            if csrf_input:
-                csrf_token = csrf_input.get('value')
-            
-            # Данные для создания объявления
-            listing_data = {
-                'title': f'Аренда аккаунта {game_name}',
-                'description': f'Аренда аккаунта Steam для игры {game_name}. Цена: {price_per_hour} руб/час.',
-                'price': price_per_hour,
-                'category': 'steam-accounts',
-                'game': game_name,
-            }
-            
-            if csrf_token:
-                listing_data['_token'] = csrf_token
-            
-            # Создаем объявление
-            response = self.session.post(
-                f"{self.base_url}/account/sells/add",
-                data=listing_data,
-                allow_redirects=True
-            )
-            
-            if response.status_code == 200:
-                self.logger.info("✅ Объявление успешно создано")
-                return {
-                    'success': True,
-                    'message': 'Объявление создано успешно',
-                    'listing_id': 'auto_generated'  # В реальной системе нужно получить ID
-                }
-            else:
-                self.logger.error(f"❌ Ошибка создания объявления: {response.status_code}")
-                return None
-                
-        except Exception as e:
-            self.logger.error(f"❌ Ошибка создания объявления: {e}")
-            return None
-    
-    def update_listing(self, listing_id: str, new_data: dict):
-        """Обновление объявления"""
+    def send_message(self, order_id: str, message: str) -> bool:
+        """Отправка сообщения в чат заказа"""
         try:
             if not self.is_logged_in:
                 if not self.login_to_funpay():
                     return False
             
-            self.logger.info(f"🔄 Обновление объявления {listing_id}")
+            self.logger.info(f"📤 Отправка сообщения для заказа {order_id}")
             
-            # Получаем страницу редактирования
-            response = self.session.get(f"{self.base_url}/account/sells/edit/{listing_id}")
+            # Получаем страницу чата заказа
+            response = self.session.get(f"{self.base_url}/account/orders/{order_id}/chat")
+            if response.status_code != 200:
+                self.logger.error(f"❌ Ошибка получения чата: {response.status_code}")
+                return False
+            
+            soup = BeautifulSoup(response.content, 'html.parser')
+            
+            # Ищем форму отправки сообщения
+            form = soup.find('form', {'action': lambda x: x and 'send' in x})
+            if not form:
+                self.logger.error("❌ Форма отправки сообщения не найдена")
+                return False
+            
+            # Получаем CSRF токен
+            csrf_token = None
+            csrf_input = form.find('input', {'name': '_token'})
+            if csrf_input:
+                csrf_token = csrf_input.get('value')
+            
+            # Данные для отправки
+            send_data = {
+                'message': message,
+                'order_id': order_id
+            }
+            
+            if csrf_token:
+                send_data['_token'] = csrf_token
+            
+            # Отправляем сообщение
+            response = self.session.post(
+                form.get('action'),
+                data=send_data,
+                allow_redirects=True
+            )
+            
+            if response.status_code == 200:
+                self.logger.info(f"✅ Сообщение отправлено для заказа {order_id}")
+                return True
+            else:
+                self.logger.error(f"❌ Ошибка отправки сообщения: {response.status_code}")
+                return False
+                
+        except Exception as e:
+            self.logger.error(f"❌ Ошибка отправки сообщения: {e}")
+            return False
+    
+    def update_listing(self, listing_id: str, data: dict) -> bool:
+        """Обновление объявления на FunPay"""
+        try:
+            if not self.is_logged_in:
+                if not self.login_to_funpay():
+                    return False
+            
+            self.logger.info(f"📝 Обновление объявления {listing_id}")
+            
+            # Получаем страницу редактирования объявления
+            response = self.session.get(f"{self.base_url}/account/listings/{listing_id}/edit")
             if response.status_code != 200:
                 self.logger.error(f"❌ Ошибка получения страницы редактирования: {response.status_code}")
                 return False
             
             soup = BeautifulSoup(response.content, 'html.parser')
             
-            # Ищем CSRF токен
+            # Ищем форму редактирования
+            form = soup.find('form', {'action': lambda x: x and 'update' in x})
+            if not form:
+                self.logger.error("❌ Форма редактирования не найдена")
+                return False
+            
+            # Получаем CSRF токен
             csrf_token = None
-            csrf_input = soup.find('input', {'name': '_token'})
+            csrf_input = form.find('input', {'name': '_token'})
             if csrf_input:
                 csrf_token = csrf_input.get('value')
             
-            # Добавляем CSRF токен к данным
+            # Подготавливаем данные для обновления
+            update_data = data.copy()
             if csrf_token:
-                new_data['_token'] = csrf_token
+                update_data['_token'] = csrf_token
             
-            # Обновляем объявление
+            # Отправляем обновление
             response = self.session.post(
-                f"{self.base_url}/account/sells/edit/{listing_id}",
-                data=new_data,
+                form.get('action'),
+                data=update_data,
                 allow_redirects=True
             )
             
             if response.status_code == 200:
-                self.logger.info("✅ Объявление успешно обновлено")
+                self.logger.info(f"✅ Объявление {listing_id} обновлено")
                 return True
             else:
                 self.logger.error(f"❌ Ошибка обновления объявления: {response.status_code}")
@@ -349,3 +353,122 @@ class FunPayManager:
             self.logger.info("🔒 Сессия FunPay закрыта")
         except Exception as e:
             self.logger.error(f"❌ Ошибка закрытия сессии: {e}")
+    
+    def check_new_orders(self):
+        """Проверка новых заказов"""
+        try:
+            if not self.is_logged_in:
+                if not self.login_to_funpay():
+                    return []
+            self.logger.info("🆕 Проверка новых заказов...")
+            orders = self.get_orders()
+            new_orders = []
+            for order in orders:
+                if order.get('status', '').lower() in ['new', 'pending', 'новый', 'в обработке']:
+                    game_name = self.extract_game_from_order(order)
+                    if game_name:
+                        order['game_name'] = game_name
+                        new_orders.append(order)
+            self.logger.info(f"✅ Найдено {len(new_orders)} новых заказов")
+            return new_orders
+        except Exception as e:
+            self.logger.error(f"❌ Ошибка проверки новых заказов: {e}")
+            return []
+    
+    def extract_game_from_order(self, order: dict) -> str:
+        """Извлечение названия игры из заказа"""
+        try:
+            title = order.get('title', '').lower()
+            game_mapping = {
+                'cs2': 'Counter-Strike 2', 'cs:go': 'Counter-Strike 2', 'counter-strike': 'Counter-Strike 2',
+                'dota': 'Dota 2', 'dota 2': 'Dota 2', 'pubg': 'PUBG', 'playerunknown': 'PUBG',
+                'valorant': 'Valorant', 'lol': 'League of Legends', 'league of legends': 'League of Legends',
+                'fortnite': 'Fortnite', 'minecraft': 'Minecraft', 'gta': 'GTA V', 'grand theft auto': 'GTA V',
+                'fifa': 'FIFA 24', 'cod': 'Call of Duty', 'call of duty': 'Call of Duty',
+                'overwatch': 'Overwatch', 'apex': 'Apex Legends', 'apex legends': 'Apex Legends'
+            }
+            for keyword, game_name in game_mapping.items():
+                if keyword in title:
+                    self.logger.info(f"🎮 Определена игра: {game_name} из заказа '{order.get('title', '')}'")
+                    return game_name
+            self.logger.warning(f"⚠️ Не удалось определить игру из заказа: {order.get('title', '')}")
+            return 'Unknown Game'
+        except Exception as e:
+            self.logger.error(f"❌ Ошибка извлечения игры из заказа: {e}")
+            return 'Unknown Game'
+    
+    def process_order(self, order_id: str, account_data: dict) -> bool:
+        """Обработка заказа - отправка данных аккаунта"""
+        try:
+            self.logger.info(f"📤 Отправка данных аккаунта для заказа {order_id}")
+            response = self.session.get(f"{self.base_url}/account/orders/{order_id}")
+            if response.status_code != 200:
+                self.logger.error(f"❌ Ошибка получения страницы заказа: {response.status_code}")
+                return False
+            soup = BeautifulSoup(response.content, 'html.parser')
+            form = soup.find('form', {'action': lambda x: x and 'send' in x})
+            if not form:
+                self.logger.error("❌ Форма отправки данных не найдена")
+                return False
+            csrf_token = None
+            csrf_input = form.find('input', {'name': '_token'})
+            if csrf_input:
+                csrf_token = csrf_input.get('value')
+            message = f"""
+🎮 Данные аккаунта для игры {account_data['game_name']}
+
+👤 Логин: {account_data['username']}
+🔑 Пароль: {account_data['password']}
+⏰ Время аренды: {account_data['duration']} часов
+🕐 Начало: {account_data['start_time']}
+
+📋 Инструкции:
+1. Войдите в Steam
+2. Введите логин и пароль
+3. При запросе Steam Guard код будет отправлен отдельно
+4. Не меняйте пароль от аккаунта
+5. Используйте аккаунт только для игр
+
+⭐ Оставьте отзыв 5 звезд для получения +30 минут бонусного времени!
+
+🆘 При проблемах обращайтесь в поддержку.
+            """.strip()
+            send_data = {
+                'message': message,
+                'order_id': order_id
+            }
+            if csrf_token:
+                send_data['_token'] = csrf_token
+            response = self.session.post(
+                form.get('action'),
+                data=send_data,
+                allow_redirects=True
+            )
+            if response.status_code == 200:
+                self.logger.info(f"✅ Данные аккаунта отправлены для заказа {order_id}")
+                return True
+            else:
+                self.logger.error(f"❌ Ошибка отправки данных: {response.status_code}")
+                return False
+        except Exception as e:
+            self.logger.error(f"❌ Ошибка обработки заказа {order_id}: {e}")
+            return False
+    
+    def check_reviews(self):
+        """Проверка новых отзывов"""
+        try:
+            if not self.is_logged_in:
+                if not self.login_to_funpay():
+                    return []
+            self.logger.info("⭐ Проверка новых отзывов...")
+            reviews = self.get_reviews()
+            new_reviews = []
+            for review in reviews:
+                # Проверяем, что отзыв новый (за последние 24 часа)
+                # Здесь можно добавить логику проверки даты
+                new_reviews.append(review)
+            self.logger.info(f"✅ Найдено {len(new_reviews)} новых отзывов")
+            return new_reviews
+        except Exception as e:
+            self.logger.error(f"❌ Ошибка проверки отзывов: {e}")
+            return []

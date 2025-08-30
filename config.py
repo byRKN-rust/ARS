@@ -5,8 +5,7 @@ load_dotenv()
 
 class Config:
     # Настройки FunPay
-    FUNPAY_LOGIN = os.getenv('FUNPAY_LOGIN', 'test_login')
-    FUNPAY_PASSWORD = os.getenv('FUNPAY_PASSWORD', 'test_password')
+    FUNPAY_TOKEN = os.getenv('FUNPAY_TOKEN', 'your_funpay_token_here')
     FUNPAY_BASE_URL = 'https://funpay.com'
     
     # Настройки Telegram бота
@@ -16,9 +15,10 @@ class Config:
     # Проверка и логирование конфигурации
     print(f"🔧 Config: TELEGRAM_TOKEN = {TELEGRAM_TOKEN[:20] if TELEGRAM_TOKEN else 'НЕ НАЙДЕН'}...")
     print(f"🔧 Config: TELEGRAM_ADMIN_ID = {TELEGRAM_ADMIN_ID}")
+    print(f"🔧 Config: FUNPAY_TOKEN = {FUNPAY_TOKEN[:20] if FUNPAY_TOKEN else 'НЕ НАЙДЕН'}...")
     
     # Настройки Steam
-    STEAM_API_KEY = os.getenv('STEAM_API_KEY', '')
+    STEAM_API_KEY = os.getenv('STEAM_API_KEY', 'your_steam_api_key_here')
     
     # Настройки базы данных
     DATABASE_PATH = 'steam_rental.db'

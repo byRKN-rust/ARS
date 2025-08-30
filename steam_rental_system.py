@@ -8,6 +8,7 @@
 import time
 import schedule
 import threading
+import sqlite3
 from datetime import datetime, timedelta
 from config import Config
 from database import Database
@@ -98,7 +99,7 @@ class SteamRentalSystem:
             print("🔑 Изменение паролей для истекших аккаунтов...")
             
             # Получаем список освобожденных аккаунтов
-            available_accounts = self.db.get_available_accounts()
+            available_accounts = self.db.get_available_accounts_list()
             
             for account in available_accounts:
                 # Генерируем новый пароль
@@ -122,11 +123,11 @@ class SteamRentalSystem:
     def update_account_password(self, account_id: int, new_password: str):
         """Обновление пароля аккаунта в базе данных"""
         try:
-            with self.db.connect() as conn:
+            with sqlite3.connect(self.db.db_path) as conn:
                 cursor = conn.cursor()
                 cursor.execute('''
                     UPDATE steam_accounts 
-                    SET password = ?, updated_at = CURRENT_TIMESTAMP
+                    SET password = ?, updated_at = datetime('now')
                     WHERE id = ?
                 ''', (new_password, account_id))
                 conn.commit()
@@ -160,7 +161,9 @@ class SteamRentalSystem:
             print(f"🔄 Обработка заказа {order['id']} для игры {order['game_name']}")
             
             # Ищем доступный аккаунт для игры
-            available_accounts = self.db.get_available_accounts(order['game_name'])
+            available_accounts = self.db.get_available_accounts_list()
+            # Фильтруем по игре
+            available_accounts = [acc for acc in available_accounts if acc['game_name'] == order['game_name']]
             
             if available_accounts:
                 # Берем первый доступный аккаунт
@@ -170,7 +173,7 @@ class SteamRentalSystem:
                 duration_hours = self.parse_duration(order['duration'])
                 
                 # Арендуем аккаунт
-                if self.db.rent_account(account['id'], order['id'], duration_hours):
+                if self.db.create_rental(account['id'], order['id'], duration_hours):
                     # Отправляем данные аккаунта через FunPay
                     account_data = {
                         'username': account['username'],
@@ -251,7 +254,7 @@ class SteamRentalSystem:
     def find_user_by_order(self, order_id: str) -> str:
         """Поиск пользователя по ID заказа"""
         try:
-            with self.db.connect() as conn:
+            with sqlite3.connect(self.db.db_path) as conn:
                 cursor = conn.cursor()
                 cursor.execute('''
                     SELECT renter_id FROM rentals 
@@ -268,9 +271,12 @@ class SteamRentalSystem:
     def add_bonus_time_to_user(self, user_id: str, minutes: int):
         """Добавление бонусного времени пользователю"""
         try:
-            # Здесь должна быть логика добавления бонусного времени
-            # Для демонстрации просто логируем
-            print(f"🎁 Добавлено {minutes} минут бонусного времени для пользователя {user_id}")
+            # Добавляем бонусное время через базу данных
+            success = self.db.add_bonus_time(user_id, minutes, "Положительный отзыв")
+            if success:
+                print(f"🎁 Добавлено {minutes} минут бонусного времени для пользователя {user_id}")
+            else:
+                print(f"❌ Не удалось добавить бонусное время для пользователя {user_id}")
             
         except Exception as e:
             print(f"❌ Ошибка при добавлении бонусного времени: {e}")

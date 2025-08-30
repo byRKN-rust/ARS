@@ -107,6 +107,130 @@ class SteamManager:
             print(f"Ошибка при получении информации о профиле {username}: {e}")
             return None
     
+    def check_steam_guard_status(self, username: str) -> bool:
+        """
+        Проверка статуса Steam Guard для аккаунта
+        """
+        try:
+            # Здесь должна быть реальная проверка Steam Guard
+            # Для демонстрации возвращаем True
+            
+            # В реальном проекте здесь будет код для:
+            # 1. Проверки настроек Steam Guard
+            # 2. Определения типа защиты (email, mobile app)
+            # 3. Получения статуса активации
+            
+            return True
+            
+        except Exception as e:
+            print(f"Ошибка при проверке Steam Guard для {username}: {e}")
+            return False
+    
+    def get_steam_guard_code(self, username: str) -> Optional[str]:
+        """
+        Получение кода Steam Guard для аккаунта
+        """
+        try:
+            # Здесь должна быть реальная логика получения кода
+            # Для демонстрации генерируем случайный код
+            
+            # В реальном проекте здесь будет код для:
+            # 1. Проверки типа Steam Guard (email/mobile)
+            # 2. Отправки запроса на получение кода
+            # 3. Ожидания и получения кода
+            
+            # Генерируем случайный 5-значный код
+            code = ''.join(random.choice(string.digits) for _ in range(5))
+            print(f"Steam Guard код для {username}: {code}")
+            return code
+            
+        except Exception as e:
+            print(f"Ошибка при получении Steam Guard кода для {username}: {e}")
+            return None
+    
+    def check_account_balance(self, username: str) -> float:
+        """
+        Проверка баланса Steam аккаунта
+        """
+        try:
+            # Здесь должна быть реальная проверка баланса
+            # Для демонстрации возвращаем случайную сумму
+            
+            # В реальном проекте здесь будет код для:
+            # 1. Авторизации в аккаунте
+            # 2. Перехода на страницу кошелька
+            # 3. Парсинга баланса
+            
+            balance = random.uniform(0.0, 100.0)
+            print(f"Баланс аккаунта {username}: {balance:.2f} руб")
+            return balance
+            
+        except Exception as e:
+            print(f"Ошибка при проверке баланса {username}: {e}")
+            return 0.0
+    
+    def get_account_games(self, username: str) -> list:
+        """
+        Получение списка игр в аккаунте
+        """
+        try:
+            # Здесь должна быть реальная проверка игр
+            # Для демонстрации возвращаем список популярных игр
+            
+            # В реальном проекте здесь будет код для:
+            # 1. Получения Steam ID пользователя
+            # 2. Запроса к Steam API для получения игр
+            # 3. Парсинга и форматирования списка
+            
+            popular_games = [
+                "Counter-Strike 2",
+                "Dota 2", 
+                "PUBG",
+                "Valorant",
+                "League of Legends",
+                "Fortnite",
+                "Minecraft",
+                "GTA V",
+                "FIFA 24",
+                "Call of Duty"
+            ]
+            
+            # Возвращаем случайные игры
+            games = random.sample(popular_games, random.randint(3, 8))
+            print(f"Игры в аккаунте {username}: {', '.join(games)}")
+            return games
+            
+        except Exception as e:
+            print(f"Ошибка при получении игр для {username}: {e}")
+            return []
+    
+    def check_account_status(self, username: str) -> dict:
+        """
+        Полная проверка статуса аккаунта
+        """
+        try:
+            status = {
+                'username': username,
+                'is_valid': self.verify_steam_account(username, ""),
+                'steam_guard_enabled': self.check_steam_guard_status(username),
+                'balance': self.check_account_balance(username),
+                'games': self.get_account_games(username),
+                'profile_info': self.get_steam_profile_info(username)
+            }
+            
+            return status
+            
+        except Exception as e:
+            print(f"Ошибка при проверке статуса аккаунта {username}: {e}")
+            return {
+                'username': username,
+                'is_valid': False,
+                'steam_guard_enabled': False,
+                'balance': 0.0,
+                'games': [],
+                'profile_info': None
+            }
+    
     def check_game_ownership(self, username: str, game_id: int) -> bool:
         """
         Проверка наличия игры в библиотеке пользователя
