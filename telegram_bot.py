@@ -70,27 +70,11 @@ class SteamRentalBot:
         try:
             self.logger.info("🚀 Запуск Telegram бота...")
             
-            # Полностью отключаем signal handling для дочернего потока
-            import signal
-            import os
-            import sys
-            
-            # Отключаем все signal handling
-            if hasattr(signal, 'set_wakeup_fd'):
-                try:
-                    signal.set_wakeup_fd(-1)
-                except (ValueError, OSError):
-                    pass
-            
-            # Отключаем обработчики сигналов
-            signal.signal(signal.SIGINT, signal.SIG_IGN)
-            signal.signal(signal.SIGTERM, signal.SIG_IGN)
-            
             # Создаем новый event loop для этого потока
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
             
-            # Запускаем бота с минимальными настройками
+            # Запускаем бота без signal handling
             self.application.run_polling(
                 allowed_updates=Update.ALL_TYPES,
                 drop_pending_updates=True,
