@@ -67,6 +67,8 @@ class SteamRentalBot:
             
         try:
             self.logger.info("🚀 Запуск Telegram бота...")
+            # Создаем новый event loop для этого потока
+            asyncio.set_event_loop(asyncio.new_event_loop())
             self.application.run_polling(allowed_updates=Update.ALL_TYPES)
         except Exception as e:
             self.logger.error(f"❌ Ошибка запуска бота: {e}")
@@ -324,6 +326,16 @@ class SteamRentalBot:
             await self.admin_users(update, context)
         elif data == "admin_accounts":
             await self.admin_accounts(update, context)
+        elif data == "admin_list_accounts":
+            await self.admin_list_accounts(update, context)
+        elif data == "admin_delete_account":
+            await self.admin_delete_account(update, context)
+        elif data.startswith("delete_account_"):
+            account_id = data.split("_")[2]
+            await self.confirm_delete_account(update, context, account_id)
+        elif data.startswith("confirm_delete_"):
+            account_id = data.split("_")[2]
+            await self.execute_delete_account(update, context, account_id)
         elif data == "show_rentals":
             await self.rentals_command(update, context)
         elif data == "admin_back":
@@ -500,3 +512,152 @@ class SteamRentalBot:
         reply_markup = InlineKeyboardMarkup(keyboard)
         
         await update.callback_query.edit_message_text(text, reply_markup=reply_markup)
+    
+    async def admin_list_accounts(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Показать список всех аккаунтов для админа"""
+        user_id = update.effective_user.id
+        
+        if str(user_id) != self.admin_id:
+            return
+        
+        try:
+            accounts = self.db.get_all_accounts()
+            
+            if not accounts:
+                text = "📭 Нет аккаунтов в системе."
+            else:
+                text = "📋 Список всех аккаунтов:\n\n"
+                
+                for account in accounts[:10]:  # Показываем первые 10
+                    status = "🔴 В аренде" if account['is_rented'] else "🟢 Свободен"
+                    text += f"🎮 #{account['id']} - {account['username']}\n"
+                    text += f"📝 Игра: {account['game_name']}\n"
+                    text += f"📊 Статус: {status}\n"
+                    text += f"📅 Создан: {account['created_at']}\n\n"
+                
+                if len(accounts) > 10:
+                    text += f"... и еще {len(accounts) - 10} аккаунтов"
+            
+        except Exception as e:
+            text = f"❌ Ошибка получения аккаунтов: {e}"
+        
+        keyboard = [
+            [InlineKeyboardButton("🗑️ Удалить аккаунт", callback_data="admin_delete_account")],
+            [InlineKeyboardButton("« Назад", callback_data="admin_accounts")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await update.callback_query.edit_message_text(text, reply_markup=reply_markup)
+    
+    async def admin_delete_account(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Показать список аккаунтов для удаления"""
+        user_id = update.effective_user.id
+        
+        if str(user_id) != self.admin_id:
+            return
+        
+        try:
+            accounts = self.db.get_all_accounts()
+            available_accounts = [acc for acc in accounts if not acc['is_rented']]
+            
+            if not available_accounts:
+                text = "❌ Нет доступных для удаления аккаунтов.\n\nАккаунты в аренде нельзя удалить."
+            else:
+                text = "🗑️ Выберите аккаунт для удаления:\n\n"
+                keyboard = []
+                
+                for account in available_accounts[:10]:  # Показываем первые 10
+                    text += f"🎮 #{account['id']} - {account['username']}\n"
+                    text += f"📝 Игра: {account['game_name']}\n\n"
+                    
+                    keyboard.append([InlineKeyboardButton(
+                        f"🗑️ Удалить #{account['id']}", 
+                        callback_data=f"delete_account_{account['id']}"
+                    )])
+                
+                if len(available_accounts) > 10:
+                    text += f"... и еще {len(available_accounts) - 10} аккаунтов"
+            
+        except Exception as e:
+            text = f"❌ Ошибка получения аккаунтов: {e}"
+            keyboard = []
+        
+        keyboard.append([InlineKeyboardButton("« Назад", callback_data="admin_list_accounts")])
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await update.callback_query.edit_message_text(text, reply_markup=reply_markup)
+    
+    async def confirm_delete_account(self, update: Update, context: ContextTypes.DEFAULT_TYPE, account_id: str):
+        """Подтверждение удаления аккаунта"""
+        user_id = update.effective_user.id
+        
+        if str(user_id) != self.admin_id:
+            return
+        
+        try:
+            account = self.db.get_account(account_id)
+            if not account:
+                await update.callback_query.edit_message_text("❌ Аккаунт не найден.")
+                return
+            
+            text = f"""
+⚠️ Подтверждение удаления
+
+🎮 Аккаунт: #{account_id}
+👤 Логин: {account['username']}
+📝 Игра: {account['game_name']}
+
+❗️ Это действие нельзя отменить!
+            
+Вы уверены, что хотите удалить этот аккаунт?
+            """
+            
+            keyboard = [
+                [InlineKeyboardButton("✅ Да, удалить", callback_data=f"confirm_delete_{account_id}")],
+                [InlineKeyboardButton("❌ Отмена", callback_data="admin_delete_account")]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            
+            await update.callback_query.edit_message_text(text, reply_markup=reply_markup)
+            
+        except Exception as e:
+            await update.callback_query.edit_message_text(f"❌ Ошибка: {e}")
+    
+    async def execute_delete_account(self, update: Update, context: ContextTypes.DEFAULT_TYPE, account_id: str):
+        """Выполнение удаления аккаунта"""
+        user_id = update.effective_user.id
+        
+        if str(user_id) != self.admin_id:
+            return
+        
+        try:
+            success = self.db.delete_account(int(account_id))
+            
+            if success:
+                text = f"""
+✅ Аккаунт успешно удален!
+
+🎮 ID: #{account_id}
+
+Аккаунт и все связанные с ним данные были удалены из системы.
+                """
+            else:
+                text = """
+❌ Не удалось удалить аккаунт
+
+Возможные причины:
+• Аккаунт не найден
+• Аккаунт находится в аренде
+• Ошибка базы данных
+                """
+            
+            keyboard = [
+                [InlineKeyboardButton("📋 Список аккаунтов", callback_data="admin_list_accounts")],
+                [InlineKeyboardButton("« В админ-панель", callback_data="admin_back")]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            
+            await update.callback_query.edit_message_text(text, reply_markup=reply_markup)
+            
+        except Exception as e:
+            await update.callback_query.edit_message_text(f"❌ Ошибка удаления: {e}")

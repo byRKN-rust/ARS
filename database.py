@@ -681,3 +681,60 @@ class Database:
         except Exception as e:
             print(f"Ошибка создания аренды: {e}")
             return False
+    
+    def delete_account(self, account_id: int) -> bool:
+        """Удаление аккаунта"""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                
+                # Проверяем, что аккаунт существует
+                cursor.execute('SELECT id, is_rented FROM steam_accounts WHERE id = ?', (account_id,))
+                account = cursor.fetchone()
+                
+                if not account:
+                    return False
+                
+                # Проверяем, что аккаунт не в аренде
+                if account[1]:  # is_rented = True
+                    return False
+                
+                # Удаляем аккаунт
+                cursor.execute('DELETE FROM steam_accounts WHERE id = ?', (account_id,))
+                
+                # Удаляем связанные записи (если есть)
+                cursor.execute('DELETE FROM rentals WHERE account_id = ?', (account_id,))
+                
+                conn.commit()
+                return True
+                
+        except Exception as e:
+            print(f"Ошибка удаления аккаунта: {e}")
+            return False
+    
+    def get_all_accounts(self) -> List[Dict]:
+        """Получение всех аккаунтов для админа"""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute('''
+                    SELECT id, username, game_name, is_rented, created_at
+                    FROM steam_accounts
+                    ORDER BY id DESC
+                ''')
+                
+                accounts = []
+                for row in cursor.fetchall():
+                    accounts.append({
+                        'id': row[0],
+                        'username': row[1],
+                        'game_name': row[2],
+                        'is_rented': row[3],
+                        'created_at': row[4]
+                    })
+                
+                return accounts
+                
+        except Exception as e:
+            print(f"Ошибка получения всех аккаунтов: {e}")
+            return []

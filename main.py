@@ -95,16 +95,19 @@ if __name__ == '__main__':
     except Exception as e:
         logger.warning(f"Ошибка инициализации системы: {e}")
     
-    # Запускаем бота в отдельном потоке
-    bot_thread = threading.Thread(target=start_bot, daemon=True)
-    bot_thread.start()
-    
     # Запускаем основную систему в отдельном потоке
     system_thread = threading.Thread(target=start_system, daemon=True)
     system_thread.start()
     
-    # Ждем немного для инициализации
-    time.sleep(3)
+    # Ждем немного для инициализации системы
+    time.sleep(2)
+    
+    # Запускаем бота в отдельном потоке
+    bot_thread = threading.Thread(target=start_bot, daemon=True)
+    bot_thread.start()
+    
+    # Ждем еще немного для инициализации бота
+    time.sleep(2)
     
     # Запускаем Flask сервер
     port = int(os.environ.get('PORT', 5000))
