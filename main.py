@@ -56,10 +56,10 @@ def start_bot():
     global bot
     try:
         # Импортируем здесь, чтобы избежать ошибок при деплое
-        from telegram_bot import SteamRentalBot
+        from telegram_bot_simple_fix import SimpleSteamRentalBot
         
-        # Создаем и настраиваем полного бота
-        bot = SteamRentalBot()
+        # Создаем и настраиваем упрощенного бота
+        bot = SimpleSteamRentalBot()
         if bot.setup():
             logger.info("Telegram бот настроен успешно")
             logger.info("Telegram бот запущен")

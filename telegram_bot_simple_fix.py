@@ -1,18 +1,21 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-🤖 Telegram бот для системы аренды Steam аккаунтов
+🤖 Упрощенный Telegram бот для системы аренды Steam аккаунтов
+Без signal handling для решения проблем в Railway
 """
 
 import logging
 import asyncio
+import os
+import sys
 from datetime import datetime, timedelta
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
 from config import Config
 from database import Database
 
-class SteamRentalBot:
+class SimpleSteamRentalBot:
     def __init__(self):
         self.token = Config.TELEGRAM_TOKEN
         self.admin_id = Config.TELEGRAM_ADMIN_ID
@@ -34,7 +37,6 @@ class SteamRentalBot:
         
         if not self.token:
             self.logger.error("❌ TELEGRAM_TOKEN не настроен!")
-            self.logger.error(f"   Текущее значение: {self.token}")
             return False
             
         try:
@@ -48,8 +50,6 @@ class SteamRentalBot:
             self.application.add_handler(CommandHandler("rentals", self.rentals_command))
             self.application.add_handler(CommandHandler("support", self.support_command))
             self.application.add_handler(CommandHandler("admin", self.admin_command))
-            self.application.add_handler(CommandHandler("add_account", self.add_account_command))
-            self.application.add_handler(CommandHandler("edit_account", self.edit_account_command))
             
             # Обработчик для inline кнопок
             self.application.add_handler(CallbackQueryHandler(self.button_callback))
@@ -62,7 +62,7 @@ class SteamRentalBot:
             return False
     
     def run(self):
-        """Запуск бота"""
+        """Запуск бота без signal handling"""
         if not self.application:
             self.logger.error("❌ Бот не настроен!")
             return
@@ -70,11 +70,10 @@ class SteamRentalBot:
         try:
             self.logger.info("🚀 Запуск Telegram бота...")
             
-            # Полностью отключаем signal handling для дочернего потока
+            # Полностью отключаем signal handling
             import signal
-            import os
             
-            # Отключаем signal handling для этого потока
+            # Отключаем все signal handling
             if hasattr(signal, 'set_wakeup_fd'):
                 try:
                     signal.set_wakeup_fd(-1)
@@ -186,8 +185,8 @@ class SteamRentalBot:
 • Активных аренд: {active_rentals}
 
 🔧 Система мониторинга активна
-        """
-            
+            """
+                
         except Exception as e:
             status_text = f"""
 ❌ Ошибка получения статуса: {e}
@@ -292,12 +291,6 @@ class SteamRentalBot:
         admin_text = """
 🔧 Админ-панель
 
-Доступные команды:
-• /admin_stats - Статистика системы
-• /admin_accounts - Управление аккаунтами
-• /admin_rentals - Управление арендами
-• /admin_users - Список пользователей
-
 📊 Быстрая статистика:
         """
         
@@ -338,6 +331,8 @@ class SteamRentalBot:
             await self.status_command(update, context)
         elif data == "show_help":
             await self.help_command(update, context)
+        elif data == "show_rentals":
+            await self.rentals_command(update, context)
         elif data.startswith("rent_account_"):
             account_id = data.split("_")[2]
             await self.handle_rent_request(update, context, account_id)
@@ -352,25 +347,11 @@ class SteamRentalBot:
             await self.admin_users(update, context)
         elif data == "admin_accounts":
             await self.admin_accounts(update, context)
-        elif data == "admin_list_accounts":
-            await self.admin_list_accounts(update, context)
-        elif data == "admin_delete_account":
-            await self.admin_delete_account(update, context)
-        elif data.startswith("delete_account_"):
-            account_id = data.split("_")[2]
-            await self.confirm_delete_account(update, context, account_id)
-        elif data.startswith("confirm_delete_"):
-            account_id = data.split("_")[2]
-            await self.execute_delete_account(update, context, account_id)
-        elif data == "show_rentals":
-            await self.rentals_command(update, context)
         elif data == "admin_back":
             await self.admin_command(update, context)
     
     async def handle_rent_request(self, update: Update, context: ContextTypes.DEFAULT_TYPE, account_id: str):
         """Обработка запроса на аренду"""
-        user_id = update.effective_user.id
-        
         try:
             account = self.db.get_account(account_id)
             if not account:
@@ -523,29 +504,6 @@ class SteamRentalBot:
         if str(user_id) != self.admin_id:
             return
         
-        text = """
-🎮 Управление аккаунтами
-
-Выберите действие:
-        """
-        
-        keyboard = [
-            [InlineKeyboardButton("➕ Добавить аккаунт", callback_data="admin_add_account")],
-            [InlineKeyboardButton("📋 Список аккаунтов", callback_data="admin_list_accounts")],
-            [InlineKeyboardButton("🔧 Редактировать", callback_data="admin_edit_accounts")],
-            [InlineKeyboardButton("« Назад", callback_data="admin_back")]
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        
-        await update.callback_query.edit_message_text(text, reply_markup=reply_markup)
-    
-    async def admin_list_accounts(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Показать список всех аккаунтов для админа"""
-        user_id = update.effective_user.id
-        
-        if str(user_id) != self.admin_id:
-            return
-        
         try:
             accounts = self.db.get_all_accounts()
             
@@ -567,358 +525,7 @@ class SteamRentalBot:
         except Exception as e:
             text = f"❌ Ошибка получения аккаунтов: {e}"
         
-        keyboard = [
-            [InlineKeyboardButton("🗑️ Удалить аккаунт", callback_data="admin_delete_account")],
-            [InlineKeyboardButton("« Назад", callback_data="admin_accounts")]
-        ]
+        keyboard = [[InlineKeyboardButton("« Назад", callback_data="admin_back")]]
         reply_markup = InlineKeyboardMarkup(keyboard)
         
         await update.callback_query.edit_message_text(text, reply_markup=reply_markup)
-    
-    async def admin_delete_account(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Показать список аккаунтов для удаления"""
-        user_id = update.effective_user.id
-        
-        if str(user_id) != self.admin_id:
-            return
-        
-        try:
-            accounts = self.db.get_all_accounts()
-            available_accounts = [acc for acc in accounts if not acc['is_rented']]
-            
-            if not available_accounts:
-                text = "❌ Нет доступных для удаления аккаунтов.\n\nАккаунты в аренде нельзя удалить."
-            else:
-                text = "🗑️ Выберите аккаунт для удаления:\n\n"
-                keyboard = []
-                
-                for account in available_accounts[:10]:  # Показываем первые 10
-                    text += f"🎮 #{account['id']} - {account['username']}\n"
-                    text += f"📝 Игра: {account['game_name']}\n\n"
-                    
-                    keyboard.append([InlineKeyboardButton(
-                        f"🗑️ Удалить #{account['id']}", 
-                        callback_data=f"delete_account_{account['id']}"
-                    )])
-                
-                if len(available_accounts) > 10:
-                    text += f"... и еще {len(available_accounts) - 10} аккаунтов"
-            
-        except Exception as e:
-            text = f"❌ Ошибка получения аккаунтов: {e}"
-            keyboard = []
-        
-        keyboard.append([InlineKeyboardButton("« Назад", callback_data="admin_list_accounts")])
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        
-        await update.callback_query.edit_message_text(text, reply_markup=reply_markup)
-    
-    async def confirm_delete_account(self, update: Update, context: ContextTypes.DEFAULT_TYPE, account_id: str):
-        """Подтверждение удаления аккаунта"""
-        user_id = update.effective_user.id
-        
-        if str(user_id) != self.admin_id:
-            return
-        
-        try:
-            account = self.db.get_account(account_id)
-            if not account:
-                await update.callback_query.edit_message_text("❌ Аккаунт не найден.")
-                return
-            
-            text = f"""
-⚠️ Подтверждение удаления
-
-🎮 Аккаунт: #{account_id}
-👤 Логин: {account['username']}
-📝 Игра: {account['game_name']}
-
-❗️ Это действие нельзя отменить!
-            
-Вы уверены, что хотите удалить этот аккаунт?
-            """
-            
-            keyboard = [
-                [InlineKeyboardButton("✅ Да, удалить", callback_data=f"confirm_delete_{account_id}")],
-                [InlineKeyboardButton("❌ Отмена", callback_data="admin_delete_account")]
-            ]
-            reply_markup = InlineKeyboardMarkup(keyboard)
-            
-            await update.callback_query.edit_message_text(text, reply_markup=reply_markup)
-            
-        except Exception as e:
-            await update.callback_query.edit_message_text(f"❌ Ошибка: {e}")
-    
-    async def execute_delete_account(self, update: Update, context: ContextTypes.DEFAULT_TYPE, account_id: str):
-        """Выполнение удаления аккаунта"""
-        user_id = update.effective_user.id
-        
-        if str(user_id) != self.admin_id:
-            return
-        
-        try:
-            success = self.db.delete_account(int(account_id))
-            
-            if success:
-                text = f"""
-✅ Аккаунт успешно удален!
-
-🎮 ID: #{account_id}
-
-Аккаунт и все связанные с ним данные были удалены из системы.
-                """
-            else:
-                text = """
-❌ Не удалось удалить аккаунт
-
-Возможные причины:
-• Аккаунт не найден
-• Аккаунт находится в аренде
-• Ошибка базы данных
-                """
-            
-            keyboard = [
-                [InlineKeyboardButton("📋 Список аккаунтов", callback_data="admin_list_accounts")],
-                [InlineKeyboardButton("« В админ-панель", callback_data="admin_back")]
-            ]
-            reply_markup = InlineKeyboardMarkup(keyboard)
-            
-            await update.callback_query.edit_message_text(text, reply_markup=reply_markup)
-            
-        except Exception as e:
-            await update.callback_query.edit_message_text(f"❌ Ошибка удаления: {e}")
-    
-    async def admin_add_account(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Показать форму добавления аккаунта"""
-        user_id = update.effective_user.id
-        
-        if str(user_id) != self.admin_id:
-            return
-        
-        text = """
-➕ Добавление нового аккаунта
-
-Для добавления аккаунта используйте команду:
-/add_account username password game_name price description
-
-Пример:
-/add_account test_user pass123 "Counter-Strike 2" 50 "Аккаунт для CS2"
-
-Параметры:
-• username - логин аккаунта
-• password - пароль аккаунта  
-• game_name - название игры
-• price - цена за час (руб)
-• description - описание (необязательно)
-        """
-        
-        keyboard = [[InlineKeyboardButton("« Назад", callback_data="admin_accounts")]]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        
-        await update.callback_query.edit_message_text(text, reply_markup=reply_markup)
-    
-    async def admin_edit_accounts(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Показать управление редактированием аккаунтов"""
-        user_id = update.effective_user.id
-        
-        if str(user_id) != self.admin_id:
-            return
-        
-        text = """
-🔧 Редактирование аккаунтов
-
-Для редактирования аккаунта используйте команду:
-/edit_account account_id field value
-
-Примеры:
-/edit_account 1 price 75
-/edit_account 1 description "Обновленное описание"
-/edit_account 1 game_name "Dota 2"
-
-Доступные поля:
-• price - цена за час
-• description - описание
-• game_name - название игры
-        """
-        
-        keyboard = [[InlineKeyboardButton("« Назад", callback_data="admin_accounts")]]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        
-        await update.callback_query.edit_message_text(text, reply_markup=reply_markup)
-    
-    async def admin_rentals(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Показать управление арендами для админа"""
-        user_id = update.effective_user.id
-        
-        if str(user_id) != self.admin_id:
-            return
-        
-        try:
-            active_rentals = self.db.get_active_rentals_list()
-            
-            if not active_rentals:
-                text = "📭 Нет активных аренд в системе."
-            else:
-                text = "📋 Активные аренды:\n\n"
-                
-                for rental in active_rentals[:10]:  # Показываем первые 10
-                    end_time = datetime.fromisoformat(rental['end_time'])
-                    remaining = end_time - datetime.now()
-                    
-                    if remaining.total_seconds() > 0:
-                        hours = int(remaining.total_seconds() // 3600)
-                        minutes = int((remaining.total_seconds() % 3600) // 60)
-                        
-                        text += f"🎮 Аккаунт #{rental['account_id']}\n"
-                        text += f"👤 Пользователь: {rental['user_id']}\n"
-                        text += f"⏰ Осталось: {hours}ч {minutes}м\n"
-                        text += f"🕐 Завершение: {end_time.strftime('%Y-%m-%d %H:%M')}\n\n"
-                    else:
-                        text += f"🎮 Аккаунт #{rental['account_id']} - Истек\n\n"
-                
-                if len(active_rentals) > 10:
-                    text += f"... и еще {len(active_rentals) - 10} аренд"
-            
-        except Exception as e:
-            text = f"❌ Ошибка получения аренд: {e}"
-        
-        keyboard = [
-            [InlineKeyboardButton("🔄 Обновить", callback_data="admin_rentals")],
-            [InlineKeyboardButton("« Назад", callback_data="admin_back")]
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        
-        await update.callback_query.edit_message_text(text, reply_markup=reply_markup)
-    
-    async def add_account_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Обработчик команды /add_account"""
-        user_id = update.effective_user.id
-        
-        if str(user_id) != self.admin_id:
-            await update.message.reply_text("❌ У вас нет доступа к этой команде.")
-            return
-        
-        try:
-            # Получаем аргументы команды
-            args = context.args
-            
-            if len(args) < 4:
-                await update.message.reply_text("""
-❌ Неправильный формат команды!
-
-📝 Правильный формат:
-/add_account username password game_name price [description]
-
-📋 Примеры:
-/add_account test_user pass123 "Counter-Strike 2" 50
-/add_account cs2_acc password123 "CS2" 75 "Аккаунт с скинами"
-                """)
-                return
-            
-            username = args[0]
-            password = args[1]
-            game_name = args[2]
-            price = float(args[3])
-            description = " ".join(args[4:]) if len(args) > 4 else ""
-            
-            # Добавляем аккаунт в базу данных
-            success = self.db.add_account(username, password, game_name, price, description)
-            
-            if success:
-                await update.message.reply_text(f"""
-✅ Аккаунт успешно добавлен!
-
-🎮 Данные аккаунта:
-👤 Логин: {username}
-📝 Игра: {game_name}
-💰 Цена: {price} руб/час
-📄 Описание: {description if description else 'Не указано'}
-
-📊 Всего аккаунтов: {self.db.get_total_accounts()}
-                """)
-            else:
-                await update.message.reply_text("❌ Не удалось добавить аккаунт. Проверьте данные и попробуйте снова.")
-                
-        except ValueError:
-            await update.message.reply_text("❌ Ошибка: цена должна быть числом!")
-        except Exception as e:
-            await update.message.reply_text(f"❌ Ошибка добавления аккаунта: {e}")
-    
-    async def edit_account_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Обработчик команды /edit_account"""
-        user_id = update.effective_user.id
-        
-        if str(user_id) != self.admin_id:
-            await update.message.reply_text("❌ У вас нет доступа к этой команде.")
-            return
-        
-        try:
-            # Получаем аргументы команды
-            args = context.args
-            
-            if len(args) < 3:
-                await update.message.reply_text("""
-❌ Неправильный формат команды!
-
-📝 Правильный формат:
-/edit_account account_id field value
-
-📋 Примеры:
-/edit_account 1 price 75
-/edit_account 1 description "Обновленное описание"
-/edit_account 1 game_name "Dota 2"
-
-🔧 Доступные поля:
-• price - цена за час
-• description - описание
-• game_name - название игры
-                """)
-                return
-            
-            account_id = int(args[0])
-            field = args[1]
-            value = " ".join(args[2:])
-            
-            # Проверяем, что аккаунт существует
-            account = self.db.get_account(account_id)
-            if not account:
-                await update.message.reply_text(f"❌ Аккаунт с ID {account_id} не найден.")
-                return
-            
-            # Проверяем, что поле можно редактировать
-            allowed_fields = ['price', 'description', 'game_name']
-            if field not in allowed_fields:
-                await update.message.reply_text(f"❌ Поле '{field}' нельзя редактировать. Доступные поля: {', '.join(allowed_fields)}")
-                return
-            
-            # Если это цена, проверяем что это число
-            if field == 'price':
-                try:
-                    value = float(value)
-                except ValueError:
-                    await update.message.reply_text("❌ Цена должна быть числом!")
-                    return
-            
-            # Обновляем аккаунт
-            success = self.db.update_account(account_id, field, value)
-            
-            if success:
-                await update.message.reply_text(f"""
-✅ Аккаунт успешно обновлен!
-
-🎮 ID: {account_id}
-📝 Поле: {field}
-🔄 Новое значение: {value}
-
-📊 Обновленные данные:
-👤 Логин: {account['username']}
-📝 Игра: {account['game_name'] if field != 'game_name' else value}
-💰 Цена: {account['price'] if field != 'price' else value} руб/час
-                """)
-            else:
-                await update.message.reply_text("❌ Не удалось обновить аккаунт. Проверьте данные и попробуйте снова.")
-                
-        except ValueError:
-            await update.message.reply_text("❌ Ошибка: ID аккаунта должен быть числом!")
-        except Exception as e:
-            await update.message.reply_text(f"❌ Ошибка обновления аккаунта: {e}")
