@@ -554,7 +554,7 @@ class Database:
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
             cursor.execute('''
-                SELECT id, username, game_name, is_rented, created_at
+                SELECT id, username, password, game_name, is_rented, created_at, price, description
                 FROM steam_accounts 
                 WHERE id = ?
             ''', (account_id,))
@@ -563,8 +563,11 @@ class Database:
             if row:
                 columns = [description[0] for description in cursor.description]
                 account = dict(zip(columns, row))
-                account['description'] = f"Аккаунт для игры {account['game_name']}"
-                account['price'] = 50  # Цена по умолчанию
+                # Устанавливаем значения по умолчанию, если поля отсутствуют
+                if 'price' not in account or account['price'] is None:
+                    account['price'] = 50
+                if 'description' not in account or account['description'] is None:
+                    account['description'] = f"Аккаунт для игры {account['game_name']}"
                 return account
             return None
     
