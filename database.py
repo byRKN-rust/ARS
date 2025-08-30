@@ -20,6 +20,8 @@ class Database:
                     username TEXT NOT NULL,
                     password TEXT NOT NULL,
                     game_name TEXT NOT NULL,
+                    price REAL DEFAULT 50.0,
+                    description TEXT DEFAULT '',
                     is_rented BOOLEAN DEFAULT FALSE,
                     current_renter_id TEXT,
                     rental_start_time DATETIME,
@@ -737,4 +739,173 @@ class Database:
                 
         except Exception as e:
             print(f"Ошибка получения всех аккаунтов: {e}")
+            return []
+    
+    def add_account(self, username: str, password: str, game_name: str, price: float, description: str = "") -> bool:
+        """Добавление нового аккаунта"""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                
+                # Проверяем, что аккаунт с таким логином не существует
+                cursor.execute('SELECT id FROM steam_accounts WHERE username = ?', (username,))
+                if cursor.fetchone():
+                    return False
+                
+                # Добавляем аккаунт
+                cursor.execute('''
+                    INSERT INTO steam_accounts (username, password, game_name, price, description)
+                    VALUES (?, ?, ?, ?, ?)
+                ''', (username, password, game_name, price, description))
+                
+                conn.commit()
+                return True
+                
+        except Exception as e:
+            print(f"Ошибка добавления аккаунта: {e}")
+            return False
+    
+    def update_account(self, account_id: int, field: str, value: str) -> bool:
+        """Обновление аккаунта"""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                
+                # Проверяем, что аккаунт существует
+                cursor.execute('SELECT id FROM steam_accounts WHERE id = ?', (account_id,))
+                if not cursor.fetchone():
+                    return False
+                
+                # Проверяем, что поле можно обновлять
+                allowed_fields = ['price', 'description', 'game_name']
+                if field not in allowed_fields:
+                    return False
+                
+                # Обновляем поле
+                cursor.execute(f'UPDATE steam_accounts SET {field} = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', (value, account_id))
+                
+                conn.commit()
+                return True
+                
+        except Exception as e:
+            print(f"Ошибка обновления аккаунта: {e}")
+            return False
+    
+    def get_active_rentals_list(self) -> List[Dict]:
+        """Получение списка активных аренд для админа"""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute('''
+                    SELECT r.account_id, r.renter_id, r.end_time, r.duration_hours
+                    FROM rentals r
+                    WHERE r.status = 'active' AND r.end_time > datetime('now')
+                    ORDER BY r.end_time ASC
+                ''')
+                
+                rentals = []
+                for row in cursor.fetchall():
+                    rentals.append({
+                        'account_id': row[0],
+                        'user_id': row[1],
+                        'end_time': row[2],
+                        'duration_hours': row[3]
+                    })
+                
+                return rentals
+                
+        except Exception as e:
+            print(f"Ошибка получения активных аренд: {e}")
+            return []
+    
+    def get_detailed_stats(self) -> Dict:
+        """Получение детальной статистики для админа"""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                
+                # Общая статистика аккаунтов
+                cursor.execute('SELECT COUNT(*) FROM steam_accounts')
+                total_accounts = cursor.fetchone()[0]
+                
+                cursor.execute('SELECT COUNT(*) FROM steam_accounts WHERE is_rented = FALSE')
+                available_accounts = cursor.fetchone()[0]
+                
+                cursor.execute('SELECT COUNT(*) FROM steam_accounts WHERE is_rented = TRUE')
+                rented_accounts = cursor.fetchone()[0]
+                
+                # Статистика аренд
+                cursor.execute('SELECT COUNT(*) FROM rentals WHERE status = "active" AND end_time > datetime("now")')
+                active_rentals = cursor.fetchone()[0]
+                
+                cursor.execute('SELECT COUNT(*) FROM rentals WHERE DATE(end_time) = DATE("now") AND status = "completed"')
+                completed_today = cursor.fetchone()[0]
+                
+                # Общий доход (примерный расчет)
+                cursor.execute('SELECT SUM(duration_hours * 50) FROM rentals WHERE status = "completed"')
+                total_revenue = cursor.fetchone()[0] or 0
+                
+                # Статистика пользователей
+                cursor.execute('SELECT COUNT(*) FROM users')
+                total_users = cursor.fetchone()[0]
+                
+                cursor.execute('SELECT COUNT(DISTINCT renter_id) FROM rentals WHERE DATE(start_time) = DATE("now")')
+                active_users_today = cursor.fetchone()[0]
+                
+                cursor.execute('SELECT COUNT(*) FROM users WHERE DATE(created_at) = DATE("now")')
+                new_users_today = cursor.fetchone()[0]
+                
+                return {
+                    'total_accounts': total_accounts,
+                    'available_accounts': available_accounts,
+                    'rented_accounts': rented_accounts,
+                    'blocked_accounts': 0,  # Пока не реализовано
+                    'active_rentals': active_rentals,
+                    'completed_today': completed_today,
+                    'total_revenue': total_revenue,
+                    'total_users': total_users,
+                    'active_users_today': active_users_today,
+                    'new_users_today': new_users_today
+                }
+                
+        except Exception as e:
+            print(f"Ошибка получения детальной статистики: {e}")
+            return {
+                'total_accounts': 0,
+                'available_accounts': 0,
+                'rented_accounts': 0,
+                'blocked_accounts': 0,
+                'active_rentals': 0,
+                'completed_today': 0,
+                'total_revenue': 0,
+                'total_users': 0,
+                'active_users_today': 0,
+                'new_users_today': 0
+            }
+    
+    def get_users_list(self) -> List[Dict]:
+        """Получение списка пользователей для админа"""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute('''
+                    SELECT u.telegram_id, u.created_at, COUNT(r.id) as rentals_count
+                    FROM users u
+                    LEFT JOIN rentals r ON u.telegram_id = r.renter_id
+                    GROUP BY u.telegram_id, u.created_at
+                    ORDER BY u.created_at DESC
+                ''')
+                
+                users = []
+                for row in cursor.fetchall():
+                    users.append({
+                        'user_id': row[0],
+                        'created_at': row[1],
+                        'rentals_count': row[2]
+                    })
+                
+                return users
+                
+        except Exception as e:
+            print(f"Ошибка получения списка пользователей: {e}")
             return []
