@@ -57,10 +57,28 @@ def start_bot():
     try:
         # Импортируем здесь, чтобы избежать ошибок при деплое
         from telegram_bot import SteamRentalBot
+        
+        # Создаем и настраиваем бота
         bot = SteamRentalBot()
-        bot.setup()
-        logger.info("Telegram бот запущен")
-        bot.run()
+        if bot.setup():
+            logger.info("Telegram бот настроен успешно")
+            
+            # Запускаем бота в отдельном потоке с правильной обработкой сигналов
+            import signal
+            import os
+            
+            # Отключаем signal handling для дочернего потока
+            if hasattr(signal, 'set_wakeup_fd'):
+                try:
+                    signal.set_wakeup_fd(-1)
+                except (ValueError, OSError):
+                    pass
+            
+            logger.info("Telegram бот запущен")
+            bot.run()
+        else:
+            logger.error("Не удалось настроить Telegram бота")
+            
     except Exception as e:
         logger.error(f"Ошибка запуска бота: {e}")
         # Не останавливаем приложение при ошибке бота
@@ -100,14 +118,14 @@ if __name__ == '__main__':
     system_thread.start()
     
     # Ждем немного для инициализации системы
-    time.sleep(2)
+    time.sleep(3)
     
     # Запускаем бота в отдельном потоке
     bot_thread = threading.Thread(target=start_bot, daemon=True)
     bot_thread.start()
     
     # Ждем еще немного для инициализации бота
-    time.sleep(2)
+    time.sleep(3)
     
     # Запускаем Flask сервер
     port = int(os.environ.get('PORT', 5000))

@@ -69,6 +69,8 @@ class SteamRentalBot:
             self.logger.info("🚀 Запуск Telegram бота...")
             # Создаем новый event loop для этого потока
             asyncio.set_event_loop(asyncio.new_event_loop())
+            
+            # Запускаем бота
             self.application.run_polling(allowed_updates=Update.ALL_TYPES)
         except Exception as e:
             self.logger.error(f"❌ Ошибка запуска бота: {e}")
